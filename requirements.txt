@@ -1,0 +1,8 @@
+Flask==2.2.3
+Flask-SQLAlchemy==3.0.3
+Flask-Marshmallow==0.14.0
+marshmallow-sqlalchemy==0.29.0
+marshmallow-enum==1.5.1
+Flask-CORS==3.0.10
+python-dotenv==1.0.0
+pytest==7.3.1

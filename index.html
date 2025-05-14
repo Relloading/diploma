@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .house {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+            height: 600px;
+            width: 800px;
+            margin: 0 auto;
+        }
+        .room {
+            border: 1px solid #ccc;
+            padding: 10px;
+            position: relative;
+        }
+        .room-title {
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .device {
+            display: inline-block;
+            margin: 5px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            position: relative;
+        }
+        .device:hover .tooltip {
+            display: block;
+        }
+        .tooltip {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            padding: 5px;
+            border-radius: 3px;
+            top: -30px;
+            left: 0;
+            z-index: 10;
+            min-width: 200px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            width: 300px;
+            border-radius: 5px;
+        }
+        .sensor-data {
+            background-color: #f0f0f0;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .controls {
+            margin: 20px auto;
+            text-align: center;
+            width: 800px;
+        }
+        .time-display {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="time-display">
+            <span id="time-of-day">12:00</span> - 
+            <span id="outside-temp">20°C</span> - 
+            <span id="outside-humidity">50%</span> - 
+            <span id="outside-light">50%</span>
+        </div>
+        <div>
+            Скорость симуляции: 
+            <button onclick="setSimulationSpeed(1.0)">1x</button>
+            <button onclick="setSimulationSpeed(15.0)">15x</button>
+            <button onclick="setSimulationSpeed(60.0)">60x</button>
+        </div>
+    </div>
+
+    <div class="house" id="house">
+        <!-- Комнаты будут сгенерированы через JavaScript -->
+    </div>
+
+    <!-- Модальное окно для управления устройствами -->
+    <div id="device-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">Устройство</h3>
+            <div id="modal-controls"></div>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeModal()">Отмена</button>
+                <button onclick="saveDeviceSettings()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Глобальные переменные
+        let houseState = {};
+        let currentDevice = null;
+        let currentRoom = null;
+        
+        // Получение состояния дома
+        async function getHouseState() {
+            try {
+                const response = await fetch('http://localhost:8000/api/state');
+                houseState = await response.json();
+                renderHouse();
+                updateTimeDisplay();
+                
+                // Обновляем каждую секунду
+                setTimeout(getHouseState, 1000);
+            } catch (error) {
+                console.error('Ошибка получения состояния:', error);
+            }
+        }
+        
+        // Отображение дома
+        function renderHouse() {
+            const houseEl = document.getElementById('house');
+            houseEl.innerHTML = '';
+            
+            const rooms = houseState.rooms;
+            for (const roomType in rooms) {
+                const room = rooms[roomType];
+                const roomEl = document.createElement('div');
+                roomEl.className = 'room';
+                
+                // Заголовок комнаты
+                const titleEl = document.createElement('div');
+                titleEl.className = 'room-title';
+                titleEl.textContent = formatRoomName(roomType);
+                roomEl.appendChild(titleEl);
+                
+                // Устройства в комнате
+                const devices = room.devices;
+                for (const deviceId in devices) {
+                    const device = devices[deviceId];
+                    
+                    // Пропускаем датчики (они отображаются отдельно)
+                    if (device.type.includes('sensor')) continue;
+                    
+                    const deviceEl = document.createElement('div');
+                    deviceEl.className = 'device';
+                    deviceEl.textContent = formatDeviceName(device.type);
+                    deviceEl.onclick = () => openDeviceModal(roomType, deviceId);
+                    
+                    // Тултип с информацией
+                    const tooltipEl = document.createElement('div');
+                    tooltipEl.className = 'tooltip';
+                    tooltipEl.innerHTML = formatDeviceStatus(device.status);
+                    deviceEl.appendChild(tooltipEl);
+                    
+                    roomEl.appendChild(deviceEl);
+                }
+                
+                // Данные датчиков
+                const sensorDataEl = document.createElement('div');
+                sensorDataEl.className = 'sensor-data';
+                sensorDataEl.innerHTML = formatSensorData(room.devices);
+                roomEl.appendChild(sensorDataEl);
+                
+                houseEl.appendChild(roomEl);
+            }
+        }
+        
+        // Обновление времени и внешних условий
+        function updateTimeDisplay() {
+            if (!houseState.time_of_day) return;
+            
+            const hours = Math.floor(houseState.time_of_day);
+            const minutes = Math.floor((houseState.time_of_day - hours) * 60);
+            document.getElementById('time-of-day').textContent = 
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            
+            document.getElementById('outside-temp').textContent = 
+                `${houseState.environment.outside_temp.toFixed(1)}°C`;
+            
+            document.getElementById('outside-humidity').textContent = 
+                `${houseState.environment.outside_humidity.toFixed(1)}%`;
+            
+            document.getElementById('outside-light').textContent = 
+                `${houseState.environment.outside_light.toFixed(1)}%`;
+        }
+        
+        // Форматирование имен
+        function formatRoomName(roomType) {
+            const names = {
+                'bathroom': 'Ванная',
+                'kitchen': 'Кухня',
+                'bedroom': 'Спальня',
+                'living_room': 'Гостиная'
+            };
+            return names[roomType] || roomType;
+        }
+        
+        function formatDeviceName(deviceType) {
+            const names = {
+                'socket': 'Розетка',
+                'camera': 'Камера',
+                'light': 'Свет',
+                'curtain': 'Шторы',
+                'window': 'Окно',
+                'ac': 'Кондиционер',
+                'climate': 'Увлажнитель'
+            };
+            return names[deviceType] || deviceType;
+        }
+        
+        // Форматирование статуса устройства
+        function formatDeviceStatus(status) {
+            let result = '<ul>';
+            
+            for (const key in status) {
+                let value = status[key];
+                
+                // Форматирование значений
+                if (key === 'power' || key === 'recording' || key === 'connected' || key === 'detected') {
+                    value = value ? 'Вкл' : 'Выкл';
+                } else if (key === 'mode') {
+                    if (value === 'cooling') value = 'Охлаждение';
+                    else if (value === 'heating') value = 'Обогрев';
+                    else if (value === 'humidify') value = 'Увлажнение';
+                    else if (value === 'dehumidify') value = 'Осушение';
+                } else if (key.includes('percent')) {
+                    value = value + '%';
+                } else if (key === 'temperature') {
+                    value = value + '°C';
+                } else if (key === 'humidity' || key === 'light_level' || key === 'brightness' || key === 'intensity') {
+                    value = value + '%';
+                }
+                
+                result += `<li>${formatKey(key)}: ${value}</li>`;
+            }
+            
+            return result + '</ul>';
+        }
+        
+        // Форматирование данных датчиков
+        function formatSensorData(devices) {
+            let result = '';
+            
+            // Температура
+            for (const deviceId in devices) {
+                const device = devices[deviceId];
+                if (device.type === 'temp_sensor') {
+                    result += `Температура: ${device.status.temperature.toFixed(1)}°C<br>`;
+                    break;
+                }
+            }
+            
+            // Влажность
+            for (const deviceId in devices) {
+                const device = devices[deviceId];
+                if (device.type === 'humidity_sensor') {
+                    result += `Влажность: ${device.status.humidity.toFixed(1)}%<br>`;
+                    break;
+                }
+            }
+            
+            // Освещенность
+            for (const deviceId in devices) {
+                const device = devices[deviceId];
+                if (device.type === 'light_sensor') {
+                    result += `Освещенность: ${device.status.light_level.toFixed(1)}%<br>`;
+                    break;
+                }
+            }
+            
+            // Движение
+            for (const deviceId in devices) {
+                const device = devices[deviceId];
+                if (device.type === 'motion_sensor') {
+                    result += `Движение: ${device.status.detected ? 'Обнаружено' : 'Нет'}`;
+                    break;
+                }
+            }
+            
+            return result;
+        }
+        
+        // Форматирование ключей
+        function formatKey(key) {
+            const keyMap = {
+                'power': 'Питание',
+                'recording': 'Запись',
+                'connected': 'Подключено',
+                'brightness': 'Яркость',
+                'open_percent': 'Открыто',
+                'mode': 'Режим',
+                'intensity': 'Мощность',
+                'temperature': 'Температура',
+                'humidity': 'Влажность',
+                'light_level': 'Освещенность',
+                'detected': 'Движение'
+            };
+            return keyMap[key] || key;
+        }
+        
+        // Открытие модального окна управления устройством
+        function openDeviceModal(roomType, deviceId) {
+            currentRoom = roomType;
+            currentDevice = deviceId;
+            
+            const device = houseState.rooms[roomType].devices[deviceId];
+            const modal = document.getElementById('device-modal');
+            const title = document.getElementById('modal-title');
+            const controls = document.getElementById('modal-controls');
+            
+            title.textContent = `${formatDeviceName(device.type)} - ${formatRoomName(roomType)}`;
+            controls.innerHTML = generateDeviceControls(device);
+            
+            modal.style.display = 'block';
+        }
+        
+        // Закрытие модального окна
+        function closeModal() {
+            document.getElementById('device-modal').style.display = 'none';
+            currentDevice = null;
+            currentRoom = null;
+        }
+        
+        // Генерация элементов управления для устройства
+        function generateDeviceControls(device) {
+            let controls = '';
+            
+            switch (device.type) {
+                case 'socket':
+                    controls += `
+                        <div>
+                            <label>
+                                <input type="checkbox" id="device-power" ${device.status.power ? 'checked' : ''}>
+                                Включить
+                            </label>
+                        </div>
+                    `;
+                    break;
+                
+                case 'camera':
+                    controls += `
+                        <div>
+                            <p>Подключено: ${device.status.connected ? 'Да' : 'Нет'}</p>
+                            <label>
+                                <input type="checkbox" id="device-recording" ${device.status.recording ? 'checked' : ''} ${!device.status.connected ? 'disabled' : ''}>
+                                Запись
+                            </label>
+                        </div>
+                    `;
+                    break;
+                
+                case 'light':
+                    controls += `
+                        <div>
+                            <label>Яркость: <span id="brightness-value">${device.status.brightness}</span>%</label>
+                            <input type="range" id="device-brightness" min="0" max="100" step="1" value="${device.status.brightness}">
+                        </div>
+                    `;
+                    break;
+                
+                case 'curtain':
+                case 'window':
+                    const isWindow = device.type === 'window';
+                    const idPrefix = isWindow ? 'window' : 'curtain';
+                    controls += `
+                        <div>
+                            <label>${isWindow ? 'Открытие' : 'Раскрытие'}: <span id="${idPrefix}-value">${device.status.open_percent}</span>%</label>
+                            <input type="range" id="device-open-percent" min="0" max="100" step="1" value="${device.status.open_percent}">
+                        </div>
+                    `;
+                    break;
+                
+                case 'ac':
+                    controls += `
+                        <div>
+                            <label>
+                                <input type="checkbox" id="device-power" ${device.status.power ? 'checked' : ''}>
+                                Включить
+                            </label>
+                        </div>
+                        <div>
+                            <label>Режим:</label>
+                            <select id="device-mode">
+                                <option value="cooling" ${device.status.mode === 'cooling' ? 'selected' : ''}>Охлаждение</option>
+                                <option value="heating" ${device.status.mode === 'heating' ? 'selected' : ''}>Обогрев</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Мощность: <span id="intensity-value">${device.status.intensity}</span>%</label>
+                            <input type="range" id="device-intensity" min="0" max="100" step="1" value="${device.status.intensity}">
+                        </div>
+                    `;
+                    break;
+                
+                case 'climate':
+                    controls += `
+                        <div>
+                            <label>
+                                <input type="checkbox" id="device-power" ${device.status.power ? 'checked' : ''}>
+                                Включить
+                            </label>
+                        </div>
+                        <div>
+                            <label>Режим:</label>
+                            <select id="device-mode">
+                                <option value="humidify" ${device.status.mode === 'humidify' ? 'selected' : ''}>Увлажнение</option>
+                                <option value="dehumidify" ${device.status.mode === 'dehumidify' ? 'selected' : ''}>Осушение</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Мощность: <span id="intensity-value">${device.status.intensity}</span>%</label>
+                            <input type="range" id="device-intensity" min="0" max="100" step="1" value="${device.status.intensity}">
+                        </div>
+                    `;
+                    break;
+                
+                case 'motion_sensor':
+                    controls += `
+                        <div>
+                            <label>
+                                <input type="checkbox" id="device-detected" ${device.status.detected ? 'checked' : ''}>
+                                Активировать
+                            </label>
+                        </div>
+                    `;
+                    break;
+                
+                default:
+                    controls = '<p>Управление недоступно</p>';
+            }
+            
+            // Добавляем обработчики событий для элементов управления
+            setTimeout(() => {
+                // Для ползунков обновляем значение в реальном времени
+                const brightnessSlider = document.getElementById('device-brightness');
+                if (brightnessSlider) {
+                    brightnessSlider.oninput = function() {
+                        document.getElementById('brightness-value').textContent = this.value;
+                    };
+                }
+                
+                const windowSlider = document.getElementById('device-open-percent');
+                if (windowSlider) {
+                    const valueId = device.type === 'window' ? 'window-value' : 'curtain-value';
+                    windowSlider.oninput = function() {
+                        document.getElementById(valueId).textContent = this.value;
+                    };
+                }
+                
+                const intensitySlider = document.getElementById('device-intensity');
+                if (intensitySlider) {
+                    intensitySlider.oninput = function() {
+                        document.getElementById('intensity-value').textContent = this.value;
+                    };
+                }
+            }, 100);
+            
+            return controls;
+        }
+        
+        // Сохранение настроек устройства
+        async function saveDeviceSettings() {
+            if (!currentDevice || !currentRoom) return;
+            
+            const device = houseState.rooms[currentRoom].devices[currentDevice];
+            const newStatus = {};
+            
+            // Получаем новые значения в зависимости от типа устройства
+            switch (device.type) {
+                case 'socket':
+                    newStatus.power = document.getElementById('device-power').checked;
+                    break;
+                
+                case 'camera':
+                    newStatus.recording = document.getElementById('device-recording').checked;
+                    break;
+                
+                case 'light':
+                    newStatus.brightness = parseInt(document.getElementById('device-brightness').value);
+                    break;
+                
+                case 'curtain':
+                case 'window':
+                    newStatus.open_percent = parseInt(document.getElementById('device-open-percent').value);
+                    break;
+                
+                case 'ac':
+                case 'climate':
+                    newStatus.power = document.getElementById('device-power').checked;
+                    newStatus.mode = document.getElementById('device-mode').value;
+                    newStatus.intensity = parseInt(document.getElementById('device-intensity').value);
+                    break;
+                
+                case 'motion_sensor':
+                    newStatus.detected = document.getElementById('device-detected').checked;
+                    break;
+            }
+            
+            try {
+                // Отправляем запрос на обновление устройства
+                const response = await fetch('http://localhost:8000/api/device', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        room: currentRoom,
+                        device_id: currentDevice,
+                        status: newStatus
+                    })
+                });
+                
+                if (response.ok) {
+                    closeModal();
+                    // Обновим состояние дома немедленно
+                    getHouseState();
+                } else {
+                    console.error('Ошибка при обновлении устройства:', await response.json());
+                }
+            } catch (error) {
+                console.error('Ошибка при отправке запроса:', error);
+            }
+        }
+        
+        // Установка скорости симуляции
+        async function setSimulationSpeed(speed) {
+            try {
+                const response = await fetch('http://localhost:8000/api/simulation/speed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(speed)
+                });
+                
+                if (!response.ok) {
+                    console.error('Ошибка при установке скорости:', await response.json());
+                }
+            } catch (error) {
+                console.error('Ошибка при отправке запроса:', error);
+            }
+        }
+        
+        // Запуск приложения
+        document.addEventListener('DOMContentLoaded', () => {
+            getHouseState();
+        });
+    </script>
+</body>
+</html>
+
