@@ -1,11 +1,9 @@
 from enum import Enum
-from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Union, Literal
+from pydantic import BaseModel
+from typing import Dict
 
 
 class DeviceType(str, Enum):
-    SOCKET = "socket"
-    CAMERA = "camera"
     LIGHT = "light"
     CURTAIN = "curtain"
     WINDOW = "window"
@@ -33,13 +31,22 @@ class DeviceStatus(BaseModel):
 class Room(BaseModel):
     type: RoomType
     devices: Dict[str, DeviceStatus]
-    
-    
+
+
+class WeatherType(str, Enum):
+    SUNNY = "sunny"
+    CLOUDY = "cloudy"
+    RAINY = "rainy"
+
+
 class House(BaseModel):
     rooms: Dict[RoomType, Room]
     environment: Dict[str, float]
-    time_of_day: float  # 0-24 hours
-    simulation_speed: float = 1.0  # 1.0, 15.0, or 60.0
+    time_of_day: float
+    time_minutes: int = 0
+    simulation_speed: float = 1.0
+    weather: WeatherType = WeatherType.SUNNY
+    days_passed: int = 0
 
 
 class DeviceUpdateRequest(BaseModel):

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +11,7 @@
             margin: 0;
             padding: 20px;
         }
+
         .house {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -19,16 +21,19 @@
             width: 800px;
             margin: 0 auto;
         }
+
         .room {
             border: 1px solid #ccc;
             padding: 10px;
             position: relative;
         }
+
         .room-title {
             font-weight: bold;
             text-align: center;
             margin-bottom: 10px;
         }
+
         .device {
             display: inline-block;
             margin: 5px;
@@ -38,9 +43,11 @@
             cursor: pointer;
             position: relative;
         }
+
         .device:hover .tooltip {
             display: block;
         }
+
         .tooltip {
             display: none;
             position: absolute;
@@ -53,6 +60,7 @@
             z-index: 10;
             min-width: 200px;
         }
+
         .modal {
             display: none;
             position: fixed;
@@ -60,9 +68,10 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.5);
             z-index: 100;
         }
+
         .modal-content {
             background-color: white;
             margin: 10% auto;
@@ -70,35 +79,84 @@
             width: 300px;
             border-radius: 5px;
         }
+
         .sensor-data {
             background-color: #f0f0f0;
             padding: 10px;
             margin-top: 10px;
         }
+
         .controls {
             margin: 20px auto;
             text-align: center;
             width: 800px;
         }
+
         .time-display {
             font-size: 18px;
             margin-bottom: 10px;
         }
+
+        .weather-sunny {
+            color: #ff9900;
+        }
+
+        .weather-cloudy {
+            color: #666666;
+        }
+
+        .weather-rainy {
+            color: #3366cc;
+        }
+
+        #weather-display {
+            display: inline-block;
+            min-width: 100px;
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
     <div class="controls">
         <div class="time-display">
-            <span id="time-of-day">12:00</span> - 
-            <span id="outside-temp">20°C</span> - 
-            <span id="outside-humidity">50%</span> - 
-            <span id="outside-light">50%</span>
+            <span id="time-of-day">12:00:00</span> -
+            <span id="outside-temp">20°C</span> -
+            <span id="outside-humidity">50%</span> -
+            <span id="outside-light">50%</span> -
+            <span id="weather-display">Ясно</span>
         </div>
         <div>
-            Скорость симуляции: 
+            Скорость симуляции:
             <button onclick="setSimulationSpeed(1.0)">1x</button>
             <button onclick="setSimulationSpeed(15.0)">15x</button>
             <button onclick="setSimulationSpeed(60.0)">60x</button>
+        </div>
+        <div style="margin-top: 10px;">
+            Погода:
+            <button onclick="setWeather('sunny')">Ясно</button>
+            <button onclick="setWeather('cloudy')">Пасмурно</button>
+            <button onclick="setWeather('rainy')">Дождь</button>
+        </div>
+
+        <div style="margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px;">
+            <h3>Virtual User</h3>
+            <div>
+                <button id="start-virtual-user">Start Virtual User</button>
+                <button id="stop-virtual-user">Stop Virtual User</button>
+            </div>
+            <div id="virtual-user-status" style="margin-top: 10px; padding: 10px; background-color: #f0f0f0;">
+                Status: Not active
+            </div>
+        </div>
+    </div>
+
+    <!-- Добавляем блок для отображения комфорта пользователя под домом -->
+    <div class="user-comfort" id="user-comfort"
+        style="margin: 20px auto; padding: 15px; background-color: #f9f9f9; border: 1px solid #ddd; width: 800px; border-radius: 5px; display: none;">
+        <h3>User Comfort Status</h3>
+        <div id="comfort-status">
+            The virtual user has not provided any feedback yet.
         </div>
     </div>
 
@@ -118,95 +176,180 @@
         </div>
     </div>
 
+    <!-- Секция с отчетами -->
+    <div class="section">
+        <h2>Reports</h2>
+        <button onclick="loadReports()">Load Reports</button>
+
+        <div id="reports-container" style="margin-top: 20px; display: none;">
+            <div id="reports-list"></div>
+        </div>
+    </div>
+
+    <div>
+        <h3>LLM Smart Home Agent</h3>
+        <div>
+            <button id="start-llm-agent">Start LLM Agent</button>
+            <button id="stop-llm-agent">Stop LLM Agent</button>
+        </div>
+        <div id="llm-agent-status">
+            Status: Not active
+        </div>
+        <div id="llm-agent-info">
+            <p>Day: <span id="simulation-day">0</span></p>
+            <p>Mode: <span id="agent-mode">Observation</span></p>
+            <p>Actions recorded: <span id="actions-recorded">0</span></p>
+        </div>
+    </div>
+
+
     <script>
         // Глобальные переменные
         let houseState = {};
         let currentDevice = null;
         let currentRoom = null;
-        
+
         // Получение состояния дома
         async function getHouseState() {
             try {
                 const response = await fetch('http://localhost:8000/api/state');
                 houseState = await response.json();
+
                 renderHouse();
                 updateTimeDisplay();
-                
-                // Обновляем каждую секунду
-                setTimeout(getHouseState, 1000);
+
+                setTimeout(getHouseState, 100);
             } catch (error) {
                 console.error('Ошибка получения состояния:', error);
             }
         }
-        
+
+
         // Отображение дома
         function renderHouse() {
             const houseEl = document.getElementById('house');
             houseEl.innerHTML = '';
-            
+
             const rooms = houseState.rooms;
             for (const roomType in rooms) {
                 const room = rooms[roomType];
                 const roomEl = document.createElement('div');
                 roomEl.className = 'room';
-                
+
                 // Заголовок комнаты
                 const titleEl = document.createElement('div');
                 titleEl.className = 'room-title';
                 titleEl.textContent = formatRoomName(roomType);
                 roomEl.appendChild(titleEl);
-                
+
                 // Устройства в комнате
                 const devices = room.devices;
                 for (const deviceId in devices) {
                     const device = devices[deviceId];
-                    
+
                     // Пропускаем датчики (они отображаются отдельно)
                     if (device.type.includes('sensor')) continue;
-                    
+
                     const deviceEl = document.createElement('div');
                     deviceEl.className = 'device';
                     deviceEl.textContent = formatDeviceName(device.type);
                     deviceEl.onclick = () => openDeviceModal(roomType, deviceId);
-                    
+
                     // Тултип с информацией
                     const tooltipEl = document.createElement('div');
                     tooltipEl.className = 'tooltip';
                     tooltipEl.innerHTML = formatDeviceStatus(device.status);
                     deviceEl.appendChild(tooltipEl);
-                    
+
                     roomEl.appendChild(deviceEl);
                 }
-                
+
                 // Данные датчиков
                 const sensorDataEl = document.createElement('div');
                 sensorDataEl.className = 'sensor-data';
                 sensorDataEl.innerHTML = formatSensorData(room.devices);
                 roomEl.appendChild(sensorDataEl);
-                
+
                 houseEl.appendChild(roomEl);
             }
         }
-        
-        // Обновление времени и внешних условий
+
+        // Установка погоды
+        async function setWeather(weather) {
+            try {
+                const response = await fetch('http://localhost:8000/api/weather', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ weather: weather })
+                });
+
+                if (!response.ok) {
+                    console.error('Ошибка при установке погоды:', await response.json());
+                }
+            } catch (error) {
+                console.error('Ошибка при отправке запроса:', error);
+            }
+        }
+
         function updateTimeDisplay() {
             if (!houseState.time_of_day) return;
-            
-            const hours = Math.floor(houseState.time_of_day);
-            const minutes = Math.floor((houseState.time_of_day - hours) * 60);
-            document.getElementById('time-of-day').textContent = 
+
+            // Получаем часы и минуты
+            const totalMinutes = houseState.time_minutes;
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = Math.floor(totalMinutes % 60);
+
+            // Форматируем время с ведущими нулями
+            const formattedTime =
                 `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-            
-            document.getElementById('outside-temp').textContent = 
+
+            document.getElementById('time-of-day').textContent = formattedTime;
+
+            document.getElementById('outside-temp').textContent =
                 `${houseState.environment.outside_temp.toFixed(1)}°C`;
-            
-            document.getElementById('outside-humidity').textContent = 
+
+            document.getElementById('outside-humidity').textContent =
                 `${houseState.environment.outside_humidity.toFixed(1)}%`;
-            
-            document.getElementById('outside-light').textContent = 
+
+            document.getElementById('outside-light').textContent =
                 `${houseState.environment.outside_light.toFixed(1)}%`;
+
+            // Обновляем отображение погоды
+            const weatherDisplay = document.getElementById('weather-display');
+            if (houseState.weather) {
+                let weatherText = "Неизвестно";
+                let weatherClass = "";
+
+                switch (houseState.weather) {
+                    case 'sunny':
+                        weatherText = "☀️ Ясно";
+                        weatherClass = "weather-sunny";
+                        break;
+                    case 'cloudy':
+                        weatherText = "☁️ Пасмурно";
+                        weatherClass = "weather-cloudy";
+                        break;
+                    case 'rainy':
+                        weatherText = "🌧️ Дождь";
+                        weatherClass = "weather-rainy";
+                        break;
+                }
+
+                weatherDisplay.textContent = weatherText;
+
+                // Удаляем все классы погоды и добавляем текущий
+                weatherDisplay.classList.remove("weather-sunny", "weather-cloudy", "weather-rainy");
+                if (weatherClass) {
+                    weatherDisplay.classList.add(weatherClass);
+                }
+            }
         }
-        
+
+
+
+
         // Форматирование имен
         function formatRoomName(roomType) {
             const names = {
@@ -217,11 +360,9 @@
             };
             return names[roomType] || roomType;
         }
-        
+
         function formatDeviceName(deviceType) {
             const names = {
-                'socket': 'Розетка',
-                'camera': 'Камера',
                 'light': 'Свет',
                 'curtain': 'Шторы',
                 'window': 'Окно',
@@ -230,22 +371,21 @@
             };
             return names[deviceType] || deviceType;
         }
-        
+
         // Форматирование статуса устройства
         function formatDeviceStatus(status) {
             let result = '<ul>';
-            
+
             for (const key in status) {
                 let value = status[key];
-                
+
                 // Форматирование значений
                 if (key === 'power' || key === 'recording' || key === 'connected' || key === 'detected') {
                     value = value ? 'Вкл' : 'Выкл';
-                } else if (key === 'mode') {
-                    if (value === 'cooling') value = 'Охлаждение';
-                    else if (value === 'heating') value = 'Обогрев';
-                    else if (value === 'humidify') value = 'Увлажнение';
-                    else if (value === 'dehumidify') value = 'Осушение';
+                } else if (key === 'target_temp') {
+                    value = value + '°C';
+                } else if (key === 'target_humidity') {
+                    value = value + '%';
                 } else if (key.includes('percent')) {
                     value = value + '%';
                 } else if (key === 'temperature') {
@@ -253,17 +393,17 @@
                 } else if (key === 'humidity' || key === 'light_level' || key === 'brightness' || key === 'intensity') {
                     value = value + '%';
                 }
-                
+
                 result += `<li>${formatKey(key)}: ${value}</li>`;
             }
-            
+
             return result + '</ul>';
         }
-        
+
         // Форматирование данных датчиков
         function formatSensorData(devices) {
             let result = '';
-            
+
             // Температура
             for (const deviceId in devices) {
                 const device = devices[deviceId];
@@ -272,7 +412,7 @@
                     break;
                 }
             }
-            
+
             // Влажность
             for (const deviceId in devices) {
                 const device = devices[deviceId];
@@ -281,7 +421,7 @@
                     break;
                 }
             }
-            
+
             // Освещенность
             for (const deviceId in devices) {
                 const device = devices[deviceId];
@@ -290,7 +430,7 @@
                     break;
                 }
             }
-            
+
             // Движение
             for (const deviceId in devices) {
                 const device = devices[deviceId];
@@ -299,19 +439,19 @@
                     break;
                 }
             }
-            
+
             return result;
         }
-        
+
         // Форматирование ключей
         function formatKey(key) {
             const keyMap = {
                 'power': 'Питание',
-                'recording': 'Запись',
                 'connected': 'Подключено',
                 'brightness': 'Яркость',
                 'open_percent': 'Открыто',
-                'mode': 'Режим',
+                'target_humidity': 'Влажность',
+                'target_temp': 'Температура',
                 'intensity': 'Мощность',
                 'temperature': 'Температура',
                 'humidity': 'Влажность',
@@ -320,58 +460,35 @@
             };
             return keyMap[key] || key;
         }
-        
+
         // Открытие модального окна управления устройством
         function openDeviceModal(roomType, deviceId) {
             currentRoom = roomType;
             currentDevice = deviceId;
-            
+
             const device = houseState.rooms[roomType].devices[deviceId];
             const modal = document.getElementById('device-modal');
             const title = document.getElementById('modal-title');
             const controls = document.getElementById('modal-controls');
-            
+
             title.textContent = `${formatDeviceName(device.type)} - ${formatRoomName(roomType)}`;
             controls.innerHTML = generateDeviceControls(device);
-            
+
             modal.style.display = 'block';
         }
-        
+
         // Закрытие модального окна
         function closeModal() {
             document.getElementById('device-modal').style.display = 'none';
             currentDevice = null;
             currentRoom = null;
         }
-        
+
         // Генерация элементов управления для устройства
         function generateDeviceControls(device) {
             let controls = '';
-            
+
             switch (device.type) {
-                case 'socket':
-                    controls += `
-                        <div>
-                            <label>
-                                <input type="checkbox" id="device-power" ${device.status.power ? 'checked' : ''}>
-                                Включить
-                            </label>
-                        </div>
-                    `;
-                    break;
-                
-                case 'camera':
-                    controls += `
-                        <div>
-                            <p>Подключено: ${device.status.connected ? 'Да' : 'Нет'}</p>
-                            <label>
-                                <input type="checkbox" id="device-recording" ${device.status.recording ? 'checked' : ''} ${!device.status.connected ? 'disabled' : ''}>
-                                Запись
-                            </label>
-                        </div>
-                    `;
-                    break;
-                
                 case 'light':
                     controls += `
                         <div>
@@ -380,7 +497,7 @@
                         </div>
                     `;
                     break;
-                
+
                 case 'curtain':
                 case 'window':
                     const isWindow = device.type === 'window';
@@ -392,7 +509,7 @@
                         </div>
                     `;
                     break;
-                
+
                 case 'ac':
                     controls += `
                         <div>
@@ -402,11 +519,8 @@
                             </label>
                         </div>
                         <div>
-                            <label>Режим:</label>
-                            <select id="device-mode">
-                                <option value="cooling" ${device.status.mode === 'cooling' ? 'selected' : ''}>Охлаждение</option>
-                                <option value="heating" ${device.status.mode === 'heating' ? 'selected' : ''}>Обогрев</option>
-                            </select>
+                            <label>Температура: <span id="target-temp-value">${device.status.target_temp}</span>°C</label>
+                            <input type="range" id="device-temp-value" min="-50" max="50" step="1" value="${device.status.target_temp}">
                         </div>
                         <div>
                             <label>Мощность: <span id="intensity-value">${device.status.intensity}</span>%</label>
@@ -414,7 +528,7 @@
                         </div>
                     `;
                     break;
-                
+
                 case 'climate':
                     controls += `
                         <div>
@@ -424,11 +538,8 @@
                             </label>
                         </div>
                         <div>
-                            <label>Режим:</label>
-                            <select id="device-mode">
-                                <option value="humidify" ${device.status.mode === 'humidify' ? 'selected' : ''}>Увлажнение</option>
-                                <option value="dehumidify" ${device.status.mode === 'dehumidify' ? 'selected' : ''}>Осушение</option>
-                            </select>
+                            <label>Влажность: <span id="target-humidity-value">${device.status.target_humidity}</span>%</label>
+                            <input type="range" id="device-humidity-value" min="0" max="100" step="1" value="${device.status.target_humidity}">
                         </div>
                         <div>
                             <label>Мощность: <span id="intensity-value">${device.status.intensity}</span>%</label>
@@ -436,7 +547,7 @@
                         </div>
                     `;
                     break;
-                
+
                 case 'motion_sensor':
                     controls += `
                         <div>
@@ -447,78 +558,86 @@
                         </div>
                     `;
                     break;
-                
+
                 default:
                     controls = '<p>Управление недоступно</p>';
             }
-            
+
             // Добавляем обработчики событий для элементов управления
             setTimeout(() => {
                 // Для ползунков обновляем значение в реальном времени
                 const brightnessSlider = document.getElementById('device-brightness');
                 if (brightnessSlider) {
-                    brightnessSlider.oninput = function() {
+                    brightnessSlider.oninput = function () {
                         document.getElementById('brightness-value').textContent = this.value;
                     };
                 }
-                
+
                 const windowSlider = document.getElementById('device-open-percent');
                 if (windowSlider) {
                     const valueId = device.type === 'window' ? 'window-value' : 'curtain-value';
-                    windowSlider.oninput = function() {
+                    windowSlider.oninput = function () {
                         document.getElementById(valueId).textContent = this.value;
                     };
                 }
-                
+
                 const intensitySlider = document.getElementById('device-intensity');
                 if (intensitySlider) {
-                    intensitySlider.oninput = function() {
+                    intensitySlider.oninput = function () {
                         document.getElementById('intensity-value').textContent = this.value;
                     };
                 }
+                const TargetTempSlider = document.getElementById('device-temp-value');
+                if (TargetTempSlider) {
+                    TargetTempSlider.oninput = function () {
+                        document.getElementById('target-temp-value').textContent = this.value;
+                    };
+                }
+                const TargetHumiditySlider = document.getElementById('device-humidity-value');
+                if (TargetHumiditySlider) {
+                    TargetHumiditySlider.oninput = function () {
+                        document.getElementById('target-humidity-value').textContent = this.value;
+                    };
+                }
             }, 100);
-            
+
             return controls;
         }
-        
+
         // Сохранение настроек устройства
         async function saveDeviceSettings() {
             if (!currentDevice || !currentRoom) return;
-            
+
             const device = houseState.rooms[currentRoom].devices[currentDevice];
             const newStatus = {};
-            
-            // Получаем новые значения в зависимости от типа устройства
+
             switch (device.type) {
-                case 'socket':
-                    newStatus.power = document.getElementById('device-power').checked;
-                    break;
-                
-                case 'camera':
-                    newStatus.recording = document.getElementById('device-recording').checked;
-                    break;
-                
+
                 case 'light':
                     newStatus.brightness = parseInt(document.getElementById('device-brightness').value);
                     break;
-                
+
                 case 'curtain':
                 case 'window':
                     newStatus.open_percent = parseInt(document.getElementById('device-open-percent').value);
                     break;
-                
+
                 case 'ac':
-                case 'climate':
                     newStatus.power = document.getElementById('device-power').checked;
-                    newStatus.mode = document.getElementById('device-mode').value;
+                    newStatus.target_temp = parseInt(document.getElementById('device-temp-value').value);
                     newStatus.intensity = parseInt(document.getElementById('device-intensity').value);
                     break;
-                
+                case 'climate':
+                    newStatus.power = document.getElementById('device-power').checked;
+                    newStatus.target_humidity = parseInt(document.getElementById('device-humidity-value').value);
+                    newStatus.intensity = parseInt(document.getElementById('device-intensity').value);
+                    break;
+
                 case 'motion_sensor':
                     newStatus.detected = document.getElementById('device-detected').checked;
                     break;
             }
-            
+
             try {
                 // Отправляем запрос на обновление устройства
                 const response = await fetch('http://localhost:8000/api/device', {
@@ -532,7 +651,7 @@
                         status: newStatus
                     })
                 });
-                
+
                 if (response.ok) {
                     closeModal();
                     // Обновим состояние дома немедленно
@@ -544,8 +663,7 @@
                 console.error('Ошибка при отправке запроса:', error);
             }
         }
-        
-        // Установка скорости симуляции
+
         async function setSimulationSpeed(speed) {
             try {
                 const response = await fetch('http://localhost:8000/api/simulation/speed', {
@@ -553,9 +671,9 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(speed)
+                    body: JSON.stringify({ speed: speed })
                 });
-                
+
                 if (!response.ok) {
                     console.error('Ошибка при установке скорости:', await response.json());
                 }
@@ -563,12 +681,247 @@
                 console.error('Ошибка при отправке запроса:', error);
             }
         }
-        
+
+
+        async function startVirtualUser() {
+            try {
+                const response = await fetch('http://localhost:8000/api/virtual_user/start', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('Virtual user started!');
+                    updateVirtualUserStatus();
+                } else {
+                    console.error('Failed to start virtual user:', await response.json());
+                }
+            } catch (error) {
+                console.error('Error starting virtual user:', error);
+            }
+        }
+
+        async function stopVirtualUser() {
+            try {
+                const response = await fetch('http://localhost:8000/api/virtual_user/stop', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('Virtual user stopped!');
+                    updateVirtualUserStatus();
+                } else {
+                    console.error('Failed to stop virtual user:', await response.json());
+                }
+            } catch (error) {
+                console.error('Error stopping virtual user:', error);
+            }
+        }
+
+        async function updateVirtualUserStatus() {
+            try {
+                const response = await fetch('http://localhost:8000/api/virtual_user/status');
+
+                if (response.ok) {
+                    const status = await response.json();
+                    const statusElement = document.getElementById('virtual-user-status');
+                    const comfortStatus = document.getElementById('comfort-status');
+
+                    if (status.active) {
+                        let statusText = `Status: <strong>${formatUserState(status.state)}</strong><br>`;
+                        statusText += `Location: <strong>${formatRoomName(status.current_room)}</strong>`;
+
+                        statusElement.innerHTML = statusText;
+                        comfortStatus.textContent = status.comfort_status || 'No feedback yet';
+                    }
+                } else {
+                    console.error('Failed to get virtual user status:', await response.json());
+                }
+            } catch (error) {
+                console.error('Error getting virtual user status:', error);
+            }
+        }
+
+        function formatUserState(state) {
+            const states = {
+                'home': 'At Home',
+                'away': 'Away',
+                'sleeping': 'Sleeping'
+            };
+            return states[state] || state;
+        }
+
+        // Функции для управления LLM агентом
+        async function startLLMAgent() {
+            try {
+                const response = await fetch('http://localhost:8000/api/llm_agent/start', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('LLM agent started!');
+                    updateLLMAgentStatus();
+                } else {
+                    console.error('Failed to start LLM agent:', await response.json());
+                }
+            } catch (error) {
+                console.error('Error starting LLM agent:', error);
+            }
+        }
+
+        async function stopLLMAgent() {
+            try {
+                const response = await fetch('http://localhost:8000/api/llm_agent/stop', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('LLM agent stopped!');
+                    updateLLMAgentStatus();
+                } else {
+                    console.error('Failed to stop LLM agent:', await response.json());
+                }
+            } catch (error) {
+                console.error('Error stopping LLM agent:', error);
+            }
+        }
+
+        async function updateLLMAgentStatus() {
+            try {
+                const response = await fetch('http://localhost:8000/api/llm_agent/status');
+
+                if (response.ok) {
+                    const status = await response.json();
+                    const statusElement = document.getElementById('llm-agent-status');
+                    const infoDiv = document.getElementById('llm-agent-info');
+
+                    if (status.active) {
+                        statusElement.innerHTML = `Status: <strong>Active</strong>`;
+                        document.getElementById('simulation-day').textContent = status.simulation_day;
+                        document.getElementById('agent-mode').textContent = status.observation_day ? 'Observation' : 'Automation';
+                        document.getElementById('actions-recorded').textContent = status.actions_recorded;
+                        infoDiv.style.display = 'block';
+                    } else {
+                        statusElement.innerHTML = `Status: <strong>Not active</strong>`;
+                        infoDiv.style.display = 'none';
+                    }
+                } else {
+                    console.error('Failed to get LLM agent status:', await response.json());
+                }
+            } catch (error) {
+                console.error('Error getting LLM agent status:', error);
+            }
+        }
+
+        // Функция для загрузки списка отчетов
+        async function loadReports() {
+            try {
+                const response = await fetch('http://localhost:8000/api/reports');
+                const data = await response.json();
+
+                const container = document.getElementById('reports-container');
+                const reportsList = document.getElementById('reports-list');
+
+                if (data.days.length === 0) {
+                    reportsList.innerHTML = '<p>No reports available yet. They will be generated after each day of simulation.</p>';
+                } else {
+                    let html = '';
+
+                    data.days.forEach(day => {
+                        html += `<div class="report-day">
+                    <h3>${day.day_id}</h3>
+                    
+                    <div class="report-files">
+                        <h4>CSV Files:</h4>
+                        <ul>`;
+
+                        day.csv_files.forEach(file => {
+                            html += `<li>
+                        <a href="http://localhost:8000/reports/${day.day_id}/${file}" target="_blank">${file}</a>
+                    </li>`;
+                        });
+
+                        html += `</ul>
+                        
+                        <h4>Image Files:</h4>
+                        <div class="image-previews">`;
+
+                        day.image_files.forEach(file => {
+                            html += `<div class="image-preview">
+                        <a href="http://localhost:8000/reports/${day.day_id}/${file}" target="_blank">
+                            <img src="http://localhost:8000/reports/${day.day_id}/${file}" width="200" />
+                            <div>${file}</div>
+                        </a>
+                    </div>`;
+                        });
+
+                        html += `</div>
+                    </div>
+                </div>
+                <hr>`;
+                    });
+
+                    reportsList.innerHTML = html;
+                }
+
+                container.style.display = 'block';
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                reportsList.innerHTML = '<p>Failed to load reports. See console for details.</p>';
+            }
+        }
+
         // Запуск приложения
         document.addEventListener('DOMContentLoaded', () => {
             getHouseState();
+            document.getElementById('start-virtual-user').addEventListener
+            document.getElementById('start-virtual-user').addEventListener('click', startVirtualUser);
+            document.getElementById('stop-virtual-user').addEventListener('click', stopVirtualUser);
+            document.getElementById('start-llm-agent').addEventListener('click', startLLMAgent);
+            document.getElementById('stop-llm-agent').addEventListener('click', stopLLMAgent);
+
+            updateLLMAgentStatus();
+            updateVirtualUserStatus();
+            loadReports(); // Загружаем отчеты при загрузке страницы
+
+            setInterval(updateLLMAgentStatus, 5000);
+            setInterval(updateVirtualUserStatus, 5000);
+
+            document.head.insertAdjacentHTML('beforeend', `
+<style>
+    .report-day {
+        margin-bottom: 20px;
+    }
+    
+    .image-previews {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .image-preview {
+        text-align: center;
+        max-width: 200px;ß
+    }
+    
+    .image-preview img {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        transition: transform 0.3s;
+    }
+    
+    .image-preview img:hover {
+        transform: scale(1.05);
+    }
+    
+    .image-preview a {
+        text-decoration: none;
+        color: #333;
+    }
+</style>
+`);
+
         });
     </script>
 </body>
-</html>
 
+</html>
